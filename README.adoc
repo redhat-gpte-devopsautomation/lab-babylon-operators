@@ -1,0 +1,11 @@
+# Introduction to Project Babylon Operators
+
+An OpenShift homeroom dashboard lab introducing the Project Babylon operators.
+
+## Build and Deploy
+
+--------------------------------------------------------------------------------
+oc process -f deploy-template.yaml \
+-p IMAGE=$(oc get is lab-babylon-operators -o jsonpath='{.status.dockerImageRepository}:latest') \
+-p GUID=test0 | oc apply -f -
+--------------------------------------------------------------------------------

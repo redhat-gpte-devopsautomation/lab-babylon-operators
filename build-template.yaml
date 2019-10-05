@@ -1,0 +1,46 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: lab-babylon-operators-build
+  name: lab-babylon-operators-build
+
+parameters:
+- name: NAME
+  value: lab-babylon-operators
+- name: GIT_REPO
+  value: https://github.com/redhat-gpte-devopsautomation/lab-babylon-operators.git
+
+labels:
+  template: lab-babylon-operators-build
+
+objects:
+- apiVersion: image.openshift.io/v1
+  kind: ImageStream
+  metadata:
+    name: ${NAME}
+  spec:
+    lookupPolicy:
+      local: false
+
+- apiVersion: build.openshift.io/v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${NAME}
+    name: ${NAME}
+  spec:
+    output:
+      to:
+        kind: ImageStreamTag
+        name: ${NAME}:latest
+    runPolicy: Serial
+    source:
+      git:
+        uri: ${GIT_REPO}
+        ref: master
+    strategy:
+      type: Docker
+      dockerStrategy: {}
+    successfulBuildsHistoryLimit: 5

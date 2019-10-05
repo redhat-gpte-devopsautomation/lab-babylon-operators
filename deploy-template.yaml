@@ -1,0 +1,193 @@
+---
+apiVersion: template.openshift.io/v1
+kind: Template
+metadata:
+  annotations:
+    description: lab-babylon-operators-deploy
+  name: lab-babylon-operators-deploy
+
+parameters:
+- name: NAME
+  required: true
+  value: lab-babylon-operators
+- name: GUID
+  required: true
+- name: IMAGE
+  required: true
+  value: quay.io/gpte-devops-automation/lab-babylon-operators:0.1.0
+- name: IMAGE_PULL_POLICY
+  required: true
+  #value: IfNotPresent
+  value: Always
+
+labels:
+  template: lab-babylon-operators-deploy
+
+objects:
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    annotations:
+      serviceaccounts.openshift.io/oauth-redirectreference.first: '{"kind":"OAuthRedirectReference","apiVersion":"v1","reference":{"kind":"Route","name":"${NAME}"}}'
+      serviceaccounts.openshift.io/oauth-redirecturi.first: oauth_callback
+      serviceaccounts.openshift.io/oauth-want-challenges: "false"
+    name: ${NAME}-user
+
+- apiVersion: v1
+  kind: RoleBinding
+  metadata:
+    name: ${NAME}-admin
+  roleRef:
+    name: admin
+  subjects:
+  - kind: ServiceAccount
+    name: ${NAME}-user
+
+- apiVersion: extensions/v1beta1
+  kind: Deployment
+  metadata:
+    name: ${NAME}
+  spec:
+    progressDeadlineSeconds: 600
+    replicas: 1
+    revisionHistoryLimit: 10
+    selector:
+      matchLabels:
+        name: ${NAME}
+    strategy:
+      type: Recreate
+    template:
+      metadata:
+        labels:
+          name: ${NAME}
+      spec:
+        containers:
+        - name: terminal
+          env:
+          - name: GUID
+            value: ${GUID}
+          - name: PROJECT_NAMESPACE
+            valueFrom:
+              fieldRef:
+                apiVersion: v1
+                fieldPath: metadata.namespace
+          - name: APPLICATION_NAME
+            value: ${NAME}
+          - name: AUTH_USERNAME
+          - name: AUTH_PASSWORD
+          - name: CLUSTER_SUBDOMAIN
+          - name: OAUTH_SERVICE_ACCOUNT
+            value: ${NAME}-user
+          - name: DOWNLOAD_URL
+          - name: WORKSHOP_FILE
+          - name: CONSOLE_URL
+            value: http://0.0.0.0:10083
+          - name: OC_VERSION
+          - name: ODO_VERSION
+          - name: KUBECTL_VERSION
+          image: ${IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          ports:
+          - containerPort: 10080
+            protocol: TCP
+          resources: {}
+          volumeMounts:
+          - mountPath: /opt/workshop/envvars
+            name: envvars
+          - mountPath: /var/run/workshop
+            name: shared
+        - name: console
+          command:
+          - /var/run/workshop/start-console.sh
+          env:
+          - name: BRIDGE_K8S_MODE
+            value: in-cluster
+          - name: BRIDGE_LISTEN
+            value: http://0.0.0.0:10083
+          - name: BRIDGE_BASE_PATH
+            value: /console/
+          - name: BRIDGE_PUBLIC_DIR
+            value: /opt/bridge/static
+          - name: BRIDGE_USER_AUTH
+            value: disabled
+          - name: BRIDGE_BRANDING
+            value: openshift
+          image: quay.io/openshift/origin-console:4.1
+          imagePullPolicy: IfNotPresent
+          resources: {}
+          volumeMounts:
+          - mountPath: /var/run/workshop
+            name: shared
+        dnsPolicy: ClusterFirst
+        initContainers:
+        - name: setup-console
+          command:
+          - /opt/workshop/bin/setup-console.sh
+          env:
+          - name: CLUSTER_SUBDOMAIN
+          - name: GUID
+            value: ${GUID}
+          - name: OPENSHIFT_PROJECT
+          - name: OPENSHIFT_USERNAME
+          - name: OPENSHIFT_PASSWORD
+          - name: OPENSHIFT_TOKEN
+          - name: OC_VERSION
+          - name: ODO_VERSION
+          - name: KUBECTL_VERSION
+          image: ${IMAGE}
+          imagePullPolicy: ${IMAGE_PULL_POLICY}
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /var/run/workshop
+            name: shared
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccountName: ${NAME}-user
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - name: envvars
+          configMap:
+            name: ${NAME}-env
+            defaultMode: 0644
+        - name: shared
+          emptyDir: {}
+
+- apiVersion: v1
+  kind: ConfigMap
+  metadata:
+    name: ${NAME}-env
+  data:
+    gateway.sh: ""
+    terminal.sh: ""
+    workshop.sh: ""
+
+- apiVersion: v1
+  kind: Service
+  metadata:
+    name: ${NAME}
+  spec:
+    ports:
+    - name: 10080-tcp
+      port: 10080
+      protocol: TCP
+      targetPort: 10080
+    selector:
+      name: ${NAME}
+    type: ClusterIP
+
+- apiVersion: route.openshift.io/v1
+  kind: Route
+  metadata:
+    name: ${NAME}
+  spec:
+    port:
+      targetPort: 10080-tcp
+    tls:
+      insecureEdgeTerminationPolicy: Redirect
+      termination: edge
+    to:
+      kind: Service
+      name: ${NAME}

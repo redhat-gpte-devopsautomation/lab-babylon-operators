@@ -1,0 +1,9 @@
+name: Babylon Operators
+
+modules:
+  activate:
+  - workshop-overview
+  - setup-environment
+  - exercises/01-poolboy-operator
+  - exercises/02-anarchy-operator
+  - workshop-summary
